@@ -153,3 +153,16 @@ Start by navigating to https://your_domain from your web browser. This will brin
 Grafana Login
 
 Enter admin into both the Email or username and Password fields and then click on the Log in button.
+3
+
+If you are using Linux, you can change the default port by changing the port from /etc/grafana/grafana.ini. There is no separate custom.ini for Linux. For Windows, MacOS or any other platform, check the official documentation.
+
+For opening grafana.ini, you would need sudo privileges. For changing the port please follow the steps below.
+
+Execute sudo gedit /etc/grafana/grafana.ini in a new Terminal window.
+Search for 3000 in the `.ini. file and you will find a line similar to the one shown below.
+# The http port  to use
+;http_port = 3000
+Remove the semicolon (;) and change the port to the port that you wish to run the grafana server on.
+Save the file and close gedit.
+You will need to restart the Grafana server for the changes to take place. Run sudo systemctl restart grafana-server.

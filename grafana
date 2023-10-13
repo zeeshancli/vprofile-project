@@ -1,0 +1,155 @@
+Step 1 — Installing Grafana
+In this first step, you will install Grafana onto your Ubuntu 20.04 server. You can install Grafana either by downloading it directly from its official website or by going through an APT repository. Because an APT repository makes it easier to install and manage Grafana’s updates, you’ll use that method in this tutorial.
+
+Download the Grafana GPG key with wget, then pipe the output to apt-key. This will add the key to your APT installation’s list of trusted keys, which will allow you to download and verify the GPG-signed Grafana package:
+
+wget -q -O - https://packages.grafana.com/gpg.key | sudo apt-key add -
+In this command, the option -q turns off the status update message for wget, and -O outputs the file that you downloaded to the terminal. These two options ensure that only the contents of the downloaded file are pipelined to apt-key.
+
+Next, add the Grafana repository to your APT sources:
+
+sudo add-apt-repository "deb https://packages.grafana.com/oss/deb stable main"
+Refresh your APT cache to update your package lists:
+
+sudo apt update
+You can now proceed with the installation:
+
+sudo apt install grafana
+Once Grafana is installed, use systemctl to start the Grafana server:
+
+sudo systemctl start grafana-server
+Next, verify that Grafana is running by checking the service’s status:
+
+sudo systemctl status grafana-server
+You will receive output similar to this:
+
+Output
+● grafana-server.service - Grafana instance
+     Loaded: loaded (/lib/systemd/system/grafana-server.service; disabled; vendor preset: enabled)
+   Active: active (running) since Thu 2020-05-21 08:08:10 UTC; 4s ago
+     Docs: http://docs.grafana.org
+ Main PID: 15982 (grafana-server)
+    Tasks: 7 (limit: 1137)
+...
+This output contains information about Grafana’s process, including its status, Main Process Identifier (PID), and more. active (running) shows that the process is running correctly.
+
+Lastly, enable the service to automatically start Grafana on boot:
+
+sudo systemctl enable grafana-server
+You will receive the following output:
+
+Output
+Synchronizing state of grafana-server.service with SysV service script with /lib/systemd/systemd-sysv-install.
+Executing: /lib/systemd/systemd-sysv-install enable grafana-server
+Created symlink /etc/systemd/system/multi-user.target.wants/grafana-server.service → /usr/lib/systemd/system/grafana-server.service.
+This confirms that systemd has created the necessary symbolic links to autostart Grafana.
+
+Grafana is now installed and ready for use. Next, you wil secure your connection to Grafana with a reverse proxy and SSL certificate.
+
+Step 2 — Setting Up the Reverse Proxy
+Using an SSL certificate will ensure that your data is secure by encrypting the connection to and from Grafana. But, to make use of this connection, you’ll first need to reconfigure Nginx as a reverse proxy for Grafana.
+
+Open the Nginx configuration file you created when you set up the Nginx server block with Let’s Encrypt in the Prerequisites. You can use any text editor, but for this tutorial we’ll use nano:
+
+sudo nano /etc/nginx/sites-available/your_domain
+Locate the following block:
+
+/etc/nginx/sites-available/your_domain
+...
+	location / {
+        try_files $uri $uri/ =404;
+	}
+...
+Because you already configured Nginx to communicate over SSL and because all web traffic to your server already passes through Nginx, you just need to tell Nginx to forward all requests to Grafana, which runs on port 3000 by default.
+
+Delete the existing try_files line in this location block and replace it with the following options:
+
+/etc/nginx/sites-available/your_domain
+...
+	location / {
+	   proxy_set_header Host $http_host;
+	   proxy_pass http://localhost:3000;
+	}
+...
+This will map the proxy to the appropriate port and will pass a server name in the header.
+
+Also, in order for the Grafana Live WebSocket connections to work correctly, add the following section outside the server section:
+
+/etc/nginx/sites-available/your_domain
+map $http_upgrade $connection_upgrade {
+  default upgrade;
+  '' close;
+}
+
+server {
+    ...
+Then add the following location section to the server block:
+
+/etc/nginx/sites-available/your_domain
+server {
+...
+        location /api/live {
+           proxy_http_version 1.1;
+           proxy_set_header Upgrade $http_upgrade;
+           proxy_set_header Connection $connection_upgrade;
+           proxy_set_header Host $http_host;
+           proxy_pass http://localhost:3000;
+	 }
+...
+The headers Upgrade and Connection are not sent from the client to the proxied server. Therefore, in order for the proxied server to know about the client’s intention to change the protocol to WebSocket, these headers should be passed explicitly.
+
+The final configuration will look like this:
+
+/etc/nginx/sites-available/your_domain
+map $http_upgrade $connection_upgrade {
+  default upgrade;
+  '' close;
+}
+
+server {
+        listen 80;
+        listen [::]:80;
+
+        root /var/www/your_domain/html;
+        index index.html index.htm index.nginx-debian.html;
+
+        server_name your_domain www.your_domain;
+
+	location / {
+	   proxy_set_header Host $http_host;
+	  	proxy_pass http://localhost:3000;
+	}
+
+	location /api/live {
+           proxy_http_version 1.1;
+           proxy_set_header Upgrade $http_upgrade;
+           proxy_set_header Connection $connection_upgrade;
+           proxy_set_header Host $http_host;
+           proxy_pass http://localhost:3000;
+	}
+}
+Once you’re done, save and close the file by pressing CTRL+X, Y, and then ENTER if you’re using nano.
+
+Now, test the new settings to make sure everything is configured correctly:
+
+sudo nginx -t
+You will receive the following output:
+
+Output
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+Finally, activate the changes by reloading Nginx:
+
+sudo systemctl reload nginx
+You can now access the default Grafana login screen by pointing your web browser to https://your_domain. If you’re unable to reach Grafana, verify that your firewall is set to allow traffic on port 443 and then re-trace the previous instructions.
+
+With the connection to Grafana encrypted, you can now implement additional security measures, starting with changing Grafana’s default administrative credentials.
+
+Step 3 — Updating Credentials
+Because every Grafana installation uses the same administrative credentials by default, it is a best practice to change your login information as soon as possible. In this step, you’ll update the credentials to improve security.
+
+Start by navigating to https://your_domain from your web browser. This will bring up the default login screen where you’ll see the Grafana logo, a form asking you to enter an Email or username and Password, a Log in button, and a Forgot your password? link.
+
+Grafana Login
+
+Enter admin into both the Email or username and Password fields and then click on the Log in button.

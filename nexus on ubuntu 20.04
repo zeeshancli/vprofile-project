@@ -107,3 +107,55 @@ To find default password run the below command
 cat /opt/nexus/sonatype-work/nexus3/admin.password
 copy the default nexus password and login, you can reset the password once logged in to nexus
 
+shell script
+#!/bin/bash
+
+# Step 1: Update package list
+sudo apt-get update
+
+# Step 2: Install OpenJDK 1.8
+sudo apt install openjdk-8-jre-headless
+
+# Step 3: Download and Install Nexus Repository Manager
+sudo mkdir /opt/nexus
+cd /opt
+sudo wget https://download.sonatype.com/nexus/3/latest-unix.tar.gz
+sudo tar -zxvf latest-unix.tar.gz
+sudo mv /opt/nexus-3.* /opt/nexus
+
+# Create Nexus user and set up permissions
+sudo adduser nexus
+echo "nexus ALL=(ALL) NOPASSWD: ALL" | sudo tee -a /etc/sudoers
+sudo chown -R nexus:nexus /opt/nexus
+sudo chown -R nexus:nexus /opt/sonatype-work
+
+# Configure Nexus to run as the nexus user
+sudo sed -i 's/#run_as_user=""/run_as_user="nexus"/' /opt/nexus/bin/nexus.rc
+
+# Step 4: Configure Nexus as a systemd service
+echo "[Unit]
+Description=nexus service
+After=network.target
+
+[Service]
+Type=forking
+LimitNOFILE=65536
+ExecStart=/opt/nexus/bin/nexus start
+ExecStop=/opt/nexus/bin/nexus stop
+User=nexus
+Restart=on-abort
+
+[Install]
+WantedBy=multi-user.target" | sudo tee /etc/systemd/system/nexus.service
+
+# Enable and start Nexus service
+sudo systemctl start nexus
+sudo systemctl enable nexus
+
+# Step 5: Access Nexus Repository Web Interface
+# Open firewall port 8081 if UFW is installed
+sudo ufw allow 8081/tcp
+
+echo "Nexus Repository Manager installed successfully. Access it at: http://server_IP:8081"
+
+

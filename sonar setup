@@ -1,3 +1,4 @@
+mc1arke/sonarqube-with-community-branch-plugin
 #!/bin/bash
 cp /etc/sysctl.conf /root/sysctl.conf_backup
 cat <<EOT> /etc/sysctl.conf
